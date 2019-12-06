@@ -15,10 +15,6 @@
 /******************************************************************************
 Includes   <System Includes> , "Project Includes"
 ******************************************************************************/
-#include <stdbool.h>
-#include <stdio.h>
-#include <machine.h>
-#include "platform.h"
 #include "ballbot_uart.h"
 
 /******************************************************************************
@@ -32,6 +28,29 @@ queue tx_queue;
 queue* tx_queue_pointer;
 queue* rx_queue_pointer;
 
+/******************************************************************************
+* Function name : interrupt_tx_init
+* Description   : Initialize the TXI8 interrupt of SCI8
+* Arguments     :
+* Return Value  :
+******************************************************************************/
+void interrupt_tx_init()
+{
+	IR(SCI8,TXI8)=1;
+	IEN(SCI8,TXI8)=1;
+}
+
+/******************************************************************************
+* Function name : interrupt_rx_init
+* Description   : Initialize the RXI8 interrupt of SCI8
+* Arguments     :
+* Return Value  :
+******************************************************************************/
+void interrupt_rx_init()
+{
+	//IR(SCI8,RXI8)=1;
+	IEN(SCI8,RXI8)=1;
+}
 
 /******************************************************************************
 * Function name : uart_init
@@ -93,7 +112,6 @@ void uart_init()
 			SCI8.SMR.BYTE=0x00;
 			SCI8.SCMR.BIT.SMIF=0;  /* Set to 0 for serial communications interface mode */
 			SCI8.BRR=48000000 / (( 64/2) * 9600)-1; /*
-
 			/* Clear IR bits (of the interrupt) for SCI8 registers: TXI, RXI, TEI */
 			IR(SCI8,RXI8)=0;	//Clear any pending ISR
 			IR(SCI8,TXI8)=0;
@@ -127,7 +145,6 @@ void uart_init()
 			LED15=LED_ON;   /* Led 15 means that the uart init has been completed */
 
 			/* Calling the initialization of interrupt for the communication */
-			interrupt_tx_init();
 			interrupt_rx_init();
 }
 
@@ -149,6 +166,7 @@ static void SCI8_TXI8_int()
 		register (TDR) of the SCI8 channel the first element of the data buffer trasmission */
 
 		tx_queue_pointer->head++;	/* Now the head of the buffer will be the next element */
+		tx_queue_pointer->counterElements--;
 	}
 }
 
@@ -162,19 +180,19 @@ static void SCI8_TXI8_int()
 static void SCI8_RXI8_int()
 {
 
-	if (rx_queue_pointer->counterElements<10)
-	{
-		lcd_clear();
-		lcd_display(LCD_LINE1,SCI8.RDR);
+	uint8_t app;
 
-
-	rx_queue_pointer->data[rx_queue_pointer->tail]=SCI8.RDR;  /* Putting the data from RDR register into the reception buffer */
+	app=SCI8.RDR;  /* Putting the data from RDR register into the reception buffer */
+	rx_queue_pointer->data[rx_queue_pointer->tail]=app;
 	rx_queue_pointer->counterElements++;		/* Incrementing the counter of received elements */
 	rx_queue_pointer->tail++;	/* Incrementing the tail pointer to the next position (it will point to an empty element) */
+	if (rx_queue_pointer->tail>=DIM_BUFFER && (rx_queue_pointer->counterElements<DIM_BUFFER-1))
+		rx_queue_pointer->tail=0;
 
-	}
-
-
+	if (SCI2.SSR.BIT.FER)
+		SCI2.SSR.BIT.FER=0;
+	if (SCI2.SSR.BIT.PER)
+		SCI2.SSR.BIT.PER=0;
 }
 
 
@@ -206,9 +224,10 @@ void tx_queue_init()
 {
 	tx_queue_pointer=&tx_queue;
 	tx_queue_pointer->head=0;
-	tx_queue_pointer->tail=2;
+	tx_queue_pointer->tail=1;
 	tx_queue_pointer->data[0]=0x55;
 	tx_queue_pointer->data[1]=0x33;
+	tx_queue_pointer->counterElements=2;
 	/* Empty queue conditions: head points to the same element pointed by tail */
 
 }
@@ -222,17 +241,21 @@ void tx_queue_init()
 ******************************************************************************/
 int queue_is_full(queue* queue_pointer)
 {
-	unsigned int tail=queue_pointer->tail; /*Saving the index of the item pointed by the tail*/
-	tail++;
-	if (tail>=DIM_BUFFER) tail=0;
+	if (queue_pointer->counterElements>=DIM_BUFFER)
+		return 1;
+	else
+		return 0;
+	/*unsigned int tail=queue_pointer->tail; /*Saving the index of the item pointed by the tail*/
+	/*tail++;
+	if (tail>=DIM_BUFFER) tail=0;*/
 	/* Because of the incremention (tail++) the var tail contains the index where the next element
 	 * will be inserted into the data buffer. If this index is equal to the index pointed by the
 	 * head this means that the queue is full
 	 */
-	if (tail==queue_pointer->head)
+	/*if (tail==queue_pointer->head)
 		return 1;
 	else
-		return 0;
+		return 0;*/
 }
 
 
@@ -245,32 +268,9 @@ int queue_is_full(queue* queue_pointer)
 int queue_is_empty(queue* queue_pointer)
 {
 	/*The queue is empty when the head and the tail points to the same item*/
-	if (queue_pointer->tail == queue_pointer->head)
+	if (!queue_pointer->counterElements)
 		return 1;
 		else
 		return 0;
 }
 
-/******************************************************************************
-* Function name : interrupt_tx_init
-* Description   : Initialize the TXI8 interrupt of SCI8
-* Arguments     :
-* Return Value  :
-******************************************************************************/
-void interrupt_tx_init()
-{
-	IR(SCI8,TXI8)=1;
-	IEN(SCI8,TXI8)=1;
-}
-
-/******************************************************************************
-* Function name : interrupt_rx_init
-* Description   : Initialize the RXI8 interrupt of SCI8
-* Arguments     :
-* Return Value  :
-******************************************************************************/
-void interrupt_rx_init()
-{
-	IR(SCI8,RXI8)=1;
-	IEN(SCI8,RXI8)=1;
-}
