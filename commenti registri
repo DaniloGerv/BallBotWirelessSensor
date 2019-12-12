@@ -1,0 +1,6 @@
+/* Enable RXI and TXI interrupts in SCI peripheral - (ref. Hardware Manual cp. 35.2.6 */
+			SCI8.SCR.BIT.RIE=1; 	 //RX buffer full - RXI and ERI interrupt requests are enabled setting the bit to 1
+			SCI8.SCR.BIT.TIE=1;	 	 //data register empty - A TXI interrupt request is enabled setting the bit to 1
+			SCI8.SCR.BIT.TEIE=1;   	//A TEI (Transmit End Interrupt) interrupt request is enabled
+			SCI8.SCR.BIT.TE=1;		//Serial transmission is enabled setting bit to 1
+			SCI8.SCR.BIT.RE=1;  	//Serial reception is enabled setting bit to 1
